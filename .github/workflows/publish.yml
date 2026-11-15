@@ -1,0 +1,60 @@
+name: Publish command-execution
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check tag, metadata and release behavior
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -I -B tests/test_release_contract.py -v
+          python -I -B .github/scripts/release.py validate --tag "$RELEASE_TAG"
+      - name: Build wheel from the selected commit
+        run: |
+          python -m pip install build setuptools wheel
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - run: python -m build --wheel --no-isolation
+      - name: Check wheel metadata
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
+      - name: Check the installed public API and actual subprocess
+        run: |
+          python -m pip install dist/*.whl packaging
+          mkdir "$RUNNER_TEMP/command-contract"
+          python -I -B tests/fixtures/command-package/check_installed.py independent "$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')" "$GITHUB_WORKSPACE/tests/fixtures/command-package/child.py" "$RUNNER_TEMP/command-contract"
+      - name: Refuse conflicting releases and recognize exact replay
+        id: registry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python -I -B .github/scripts/release.py registry --tag "$RELEASE_TAG"
+      - name: Publish through the configured PyPI trusted publisher
+        if: steps.registry.outputs.decision == 'publish'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+      - name: Verify registry bytes after publication or exact replay
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -I -B .github/scripts/release.py registry --tag "$RELEASE_TAG" | tee registry-result.json
+          python -c 'import json; assert json.load(open("registry-result.json"))["decision"] == "already-published"'

@@ -1,5 +1,5 @@
 """Independent configuration and command preparation/execution APIs."""
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from .actions import execute_action, plan_action
 from .configuration import (
