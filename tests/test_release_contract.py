@@ -67,12 +67,12 @@ class MetadataContract(unittest.TestCase):
 
     def test_distribution_declares_requested_release(self):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
-        self.assertEqual(project["version"], CONTRACT["version"])
+        self.assertEqual(project["version"], CONTRACT["source_version"])
 
     def test_module_declares_requested_release(self):
         self.assertEqual(
             declared_version(ROOT / "src/command_execution/__init__.py"),
-            CONTRACT["version"],
+            CONTRACT["source_version"],
         )
 
 

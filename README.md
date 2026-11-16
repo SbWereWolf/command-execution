@@ -1,60 +1,74 @@
 # command-execution
 
-Самостоятельная Python-библиотека подготовки и выполнения команд и изменения
-декларативных конфигураций. Требуется Python 3.11 или новее.
+Run external commands from Python using explicit, reusable command declarations.
+Prepare arguments, working directories and environment variables before starting
+processes, decide which exit codes mean success, and inspect the actual output.
 
-После публикации выбранная версия устанавливается через менеджер пакетов:
+Use it for build steps, local automation or tools that store their commands in
+JSON. The same library can read and edit those JSON configurations: select items
+by ID, add them, update fields with JSON Patch, or remove them.
 
-```bash
-python -m pip install 'command-execution==1.0.0'
+Requires **Python 3.11 or later**.
+
+## Install
+
+```sh
+python -m pip install "command-execution==1.0.1"
 ```
 
-Исходники выделены с историей из `environment-maintenance/packages/command-execution`.
-Первый самостоятельный выпуск — **1.0.0**, тег **v1.0.0**. Исторический bootstrap
-с metadata 0.1.0 не является этим выпуском.
+## Quickstart
 
-## Однократная настройка публикации
+This example starts a real Python subprocess and prints its result:
 
-Локальная рабочая копия: `/home/sbwerewolf/workdata/command-execution`.
-Локальный bare: `/mnt/d/WORK/kv1me/planing/command-execution.git`, remote `bare-local`.
-GitHub-репозиторий создаёт владелец из этой рабочей копии; его адрес затем добавляется
-как `origin`. Эти адреса описывают текущую установку, а не обязательное расположение
-для других разработчиков.
+```python
+import sys
+from pathlib import Path
 
-В PyPI настройте pending/обычный Trusted Publisher для проекта `command-execution`:
-фактические владелец и GitHub-репозиторий, workflow `publish.yml`, environment `pypi`.
-В GitHub создайте соответствующий environment. Workflow получает OIDC identity;
-API-токен и ручная загрузка wheel не требуются. Доступность имени и права на проект
-подтверждаются владельцем в PyPI до первого push тега.
+from command_execution import execute_action
+from command_execution.actions.interpreters import exit_result
 
-## Выпуск
+action = {
+    "commands": [{
+        "argv": [sys.executable, "-c", "print('Hello from command-execution')"],
+        "cwd": ".",
+        "env": {},
+        "interpreter": {"name": "exit", "options": {"accept": [0]}},
+    }],
+}
+result = execute_action(
+    action, {},
+    base_dir=Path.cwd(),
+    interpreters={"exit": exit_result},
+)
+print(result["status"])
+print(result["commands"][0]["stdout"].decode(), end="")
+```
 
-1. Измените обе версии: `pyproject.toml` и `src/command_execution/__init__.py`.
-   Обновите буквальные ожидания выпуска в тестах и фикстурах для новой версии.
-2. Выполните `python -I -B tests/test_release_contract.py -v`, сохраните commit
-   с workflow и согласованными metadata. Собирайте локально из временной копии
-   отслеживаемых файлов этого commit: backend создаёт `egg-info` и `build` в source.
-3. Создайте annotated тег, например `git tag -a v1.0.0 -m 'Release 1.0.0'`,
-   сохраните ветку и тег в `bare-local`. После настройки origin и publisher
-   отправьте ветку и **этот же** тег в origin: `git push origin master v1.0.0`.
+Output:
 
-Push тега запускает проверки, сборку wheel и публикацию в PyPI. Тег обязан
-указывать на commit, уже содержащий workflow. GitHub Release и ручной архив
-для этого маршрута не нужны. Не передвигайте опубликованный тег.
+```text
+succeeded
+Hello from command-execution
+```
 
-## Повтор и отказ
+Each command declares its argument list, working directory, complete environment
+and result interpreter. Commands run in order; execution stops at the first
+failed launch or rejected result. `stdout` and `stderr` are preserved as bytes,
+and `exit_code` contains the actual process return code.
 
-Реестр проверяется read-only GET по точным имени и версии. Только HTTP 404
-разрешает первую публикацию. Уже опубликованный точный набор файлов с теми же
-SHA-256 даёт успешный пропуск загрузки. Отличающиеся или неполные файлы,
-отказ доступа и сетевая ошибка останавливают выпуск с диагностикой.
-Для воспроизводимого wheel workflow использует время commit в SOURCE_DATE_EPOCH.
-Изменение backend может изменить байты: в таком случае выпускайте новую версию.
+## Learn more
 
-После прерванного запуска сначала проверьте Actions и фактические файлы PyPI;
-повторите тот же workflow при тех же исходниках. Не обходите конфликт заменой
-тега или ручной перезаписью файлов. После публикации проверьте чистую установку
-версии 1.0.0; до неё доступность версии в PyPI не считается подтверждённой.
+The [usage guide](https://github.com/SbWereWolf/command-execution/blob/v1.0.1/docs/usage.md)
+explains parameter substitution, planning without execution, result fields,
+failure handling and a complete JSON configuration example.
 
-Ссылки: [Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/),
-[API версии](https://docs.pypi.org/api/json/#get-a-release).
+| API | Purpose |
+| --- | --- |
+| `plan_action` | Expand and validate a command declaration without starting processes. |
+| `execute_action` | Prepare and run commands, returning output and interpreted results. |
+| `list_requirement_ids`, `read_requirements` | Read selected configuration items. |
+| `add_requirement`, `update_requirement` | Add an item or edit it with JSON Patch. |
+| `delete_requirement`, `clear_requirements` | Remove one item or empty the selected list. |
+
+[Русская версия](https://github.com/SbWereWolf/command-execution/blob/v1.0.1/README.ru.md)
+· [Руководство на русском](https://github.com/SbWereWolf/command-execution/blob/v1.0.1/docs/usage.ru.md)
