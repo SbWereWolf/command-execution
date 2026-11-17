@@ -1,12 +1,14 @@
-"""Independent configuration and command preparation/execution APIs."""
-__version__ = "1.1.0"
+"""Pure configuration, command coordination and structured execution results."""
+__version__ = '2.0.0'
 
-from .actions import execute_action, plan_action, execute_chain, plan_chain
-from .configuration import (
-    add_requirement,
-    clear_requirements,
-    delete_requirement,
-    list_requirement_ids,
-    read_requirements,
-    update_requirement,
-)
+from .json_codec import JSONCodec
+from .json_paths import JSONPathEditor, JSONMerger
+from .collections import DocumentCollection
+from .parameters import ParameterLookup, TemplateRenderer, DeferredResolver
+from .command_model import CommandSpec, RawOutcome, CommandOutcome, ChainResult, OutputChunk, CommandPlan
+from .configuration import CommandPlanner, OutputSelection, OutputStreams, ConfigurationIssue
+from .results import ResultStore, MemoryResultStore, DispatchResultView
+from .error_policy import ErrorPolicy
+from .delivery import OutputDelivery, JSONLWriter
+from .lists import ListCoordinator, CallListRunner
+from .execution import ProcessWorker, ChainCoordinator, ChainRun
