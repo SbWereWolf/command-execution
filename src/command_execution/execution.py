@@ -17,6 +17,12 @@ def error_record(error):
     return {'type': type(error).__name__, 'message': str(error)}
 
 
+def _dataflow_snapshot(value):
+    """Check the existing stdin encoding boundary before replacing chain data."""
+    json.dumps(value, ensure_ascii=True, allow_nan=False)
+    return deepcopy(value)
+
+
 class _DispatchStopped(Exception):
     pass
 
@@ -153,23 +159,46 @@ class ChainCoordinator:
             except BaseException as error:
                 fail(error)
                 return
+            interpreted = None
             try:
                 interpreted = self.interpreter(raw, spec) if self.interpreter else {
                     'success': raw.launch_error is None and raw.returncode == 0,
                     'value': None, 'error': raw.launch_error or (
                         None if raw.returncode == 0 else {'returncode': raw.returncode})}
-                if not isinstance(interpreted, dict) or type(interpreted.get('success')) is not bool:
-                    raise ValueError('Interpreter must return an object with a boolean success')
+                if not isinstance(interpreted, dict):
+                    raise ValueError('Interpreter must return an object with success, value and error')
+                missing = [name for name in ('success', 'value', 'error') if name not in interpreted]
+                if missing:
+                    raise ValueError('Interpreter result is missing required fields: ' + ', '.join(missing))
+                if type(interpreted['success']) is not bool:
+                    raise ValueError('Interpreter result success must be boolean')
             except BaseException as error:
-                fail(error)
-                interpreted = {'success': False, 'value': None, 'error': error_record(error)}
+                context = {'stage': 'interpretation', 'command_id': spec.id, **error_record(error)}
+                if isinstance(interpreted, dict) and interpreted.get('error') is not None:
+                    context['previous_error'] = interpreted['error']
+                interpreted = {'success': False, 'value': None,
+                    'error': context}
+            advance = False
+            if spec.execution == 'sync' and 'next_input' in interpreted:
+                try:
+                    next_data = _dataflow_snapshot(interpreted['next_input'])
+                    advance = True
+                except BaseException as error:
+                    if not isinstance(error, (TypeError, ValueError, RecursionError, OverflowError)):
+                        fail(error)
+                    context = {'stage': 'next_input', 'command_id': spec.id,
+                               **error_record(error)}
+                    if interpreted['error'] is not None:
+                        context['previous_error'] = interpreted['error']
+                    interpreted = {**interpreted, 'success': False, 'error': context}
+                    interpreted.pop('next_input', None)
             row = CommandOutcome(spec.id, spec.source_index,
                 'launch_failed' if raw.launch_error else 'finished', raw, data,
                 interpreted, interpreted.get('error'))
             with state_lock:
                 state['failed'] = state['failed'] or not interpreted['success']
-                if spec.execution == 'sync' and 'next_input' in interpreted:
-                    state['data'] = deepcopy(interpreted['next_input'])
+                if advance:
+                    state['data'] = next_data
             coordinator.observe(spec.on_error, row)
             try:
                 self.store.record_outcome(spec.source_index, row)
