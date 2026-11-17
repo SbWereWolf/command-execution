@@ -17,6 +17,29 @@ def error_record(error):
     return {'type': type(error).__name__, 'message': str(error)}
 
 
+def _interpret_outcome(raw, spec, interpreter):
+    """Normalize one interpreter reply without dispatch or result-store state."""
+    interpreted = None
+    try:
+        interpreted = interpreter(raw, spec) if interpreter else {
+            'success': raw.launch_error is None and raw.returncode == 0,
+            'value': None, 'error': raw.launch_error or (
+                None if raw.returncode == 0 else {'returncode': raw.returncode})}
+        if not isinstance(interpreted, dict):
+            raise ValueError('Interpreter must return an object with success, value and error')
+        missing = [name for name in ('success', 'value', 'error') if name not in interpreted]
+        if missing:
+            raise ValueError('Interpreter result is missing required fields: ' + ', '.join(missing))
+        if type(interpreted['success']) is not bool:
+            raise ValueError('Interpreter result success must be boolean')
+    except BaseException as error:
+        context = {'stage': 'interpretation', 'command_id': spec.id, **error_record(error)}
+        if isinstance(interpreted, dict) and interpreted.get('error') is not None:
+            context['previous_error'] = interpreted['error']
+        interpreted = {'success': False, 'value': None, 'error': context}
+    return interpreted
+
+
 def _dataflow_snapshot(value):
     """Check the existing stdin encoding boundary before replacing chain data."""
     json.dumps(value, ensure_ascii=True, allow_nan=False)
@@ -159,25 +182,7 @@ class ChainCoordinator:
             except BaseException as error:
                 fail(error)
                 return
-            interpreted = None
-            try:
-                interpreted = self.interpreter(raw, spec) if self.interpreter else {
-                    'success': raw.launch_error is None and raw.returncode == 0,
-                    'value': None, 'error': raw.launch_error or (
-                        None if raw.returncode == 0 else {'returncode': raw.returncode})}
-                if not isinstance(interpreted, dict):
-                    raise ValueError('Interpreter must return an object with success, value and error')
-                missing = [name for name in ('success', 'value', 'error') if name not in interpreted]
-                if missing:
-                    raise ValueError('Interpreter result is missing required fields: ' + ', '.join(missing))
-                if type(interpreted['success']) is not bool:
-                    raise ValueError('Interpreter result success must be boolean')
-            except BaseException as error:
-                context = {'stage': 'interpretation', 'command_id': spec.id, **error_record(error)}
-                if isinstance(interpreted, dict) and interpreted.get('error') is not None:
-                    context['previous_error'] = interpreted['error']
-                interpreted = {'success': False, 'value': None,
-                    'error': context}
+            interpreted = _interpret_outcome(raw, spec, self.interpreter)
             advance = False
             if spec.execution == 'sync' and 'next_input' in interpreted:
                 try:
