@@ -228,9 +228,27 @@ class ChainCoordinator:
             if coordinator.halted:
                 not_attempted(spec, data)
             elif spec.execution == 'async':
-                worker = threading.Thread(target=execute, args=(spec, data))
-                workers.append(worker)
-                worker.start()
+                try:
+                    worker = threading.Thread(target=execute, args=(spec, data))
+                    worker.start()
+                except Exception as error:
+                    context = {'stage': 'dispatch', 'command_id': spec.id, **error_record(error)}
+                    row = CommandOutcome(spec.id, spec.source_index, 'dispatch_failed', None,
+                        data, {'success': False, 'value': None, 'error': context}, context)
+                    with state_lock:
+                        state['failed'] = True
+                    coordinator.observe(spec.on_error, row)
+                    try:
+                        self.store.record_outcome(spec.source_index, row)
+                    except BaseException as store_error:
+                        fail(store_error)
+                    if on_result is not None:
+                        try:
+                            on_result(row)
+                        except BaseException as observer_error:
+                            fail(observer_error, observers)
+                else:
+                    workers.append(worker)
             else:
                 execute(spec, data)
         with state_lock:
@@ -264,7 +282,11 @@ class ChainCoordinator:
                 run._result = result
             finally:
                 run._complete.set()
-        threading.Thread(target=finish).start()
+        try:
+            threading.Thread(target=finish).start()
+        except Exception:
+            # Resource exhaustion must not discard recorded dispatch failures.
+            finish()
         return run
 
     def run(self, initial, on_result=None):

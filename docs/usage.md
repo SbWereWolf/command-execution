@@ -40,6 +40,14 @@ Additional fields remain in `CommandSpec.properties`; the consumer interprets th
 An observed failed stop-command prevents further launches. It does not cancel
 already launched work or undo effects. A late async failure cannot retroactively
 prevent an earlier launch. Continue retains failure and permits later commands.
+A failure to construct or start an async worker records `state="dispatch_failed"`,
+`raw=None` and a failed interpretation with a contextual dispatch error. No child
+process facts are invented and no result interpreter is called. The command's
+`on_error` governs subsequent dispatch; the completion callback runs in the
+dispatching caller. CE retains failure in its aggregate even with `continue`.
+If the completion thread also cannot start, settlement runs in the caller and
+waits for already launched workers.
+
 Transport, store, delivery and observer infrastructure failures stop further
 dispatch independently of `on_error`. Recovery, deployment acceptance and retry
 belong to the caller.
