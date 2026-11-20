@@ -7,7 +7,7 @@ nested JSON values, renders typed parameters, and interprets command results.
 
 Each command chooses sync/async execution and stop/continue on failure.
 Your commands or Bash scripts own filesystem, environment and signal policy.
-Requires Python 3.11+; command-line examples use Ubuntu.
+Requires Python 3.12+. Command-line examples use Ubuntu.
 
 ## Install
 

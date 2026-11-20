@@ -5,17 +5,7 @@
         "${python}",
         "-B",
         "${probe}"
-      ],
-      "cwd": "${work}",
-      "env": {},
-      "interpreter": {
-        "name": "exit",
-        "options": {
-          "accept": [
-            7
-          ]
-        }
-      }
+      ]
     }
   ]
 }

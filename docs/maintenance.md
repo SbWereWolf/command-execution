@@ -3,7 +3,7 @@
 <a id="installation-and-versions"></a>
 ## Installation and versions
 
-Use Python 3.11+ with pip. Choose an available 2.x release from your index,
+Use Python 3.12+ with pip. Choose an available 2.x release from your index,
 a complete offline wheelhouse, or the selected source checkout.
 From that checkout, install into your prepared environment:
 

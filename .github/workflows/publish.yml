@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.15'
       - name: Check tag, metadata and release behavior
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -38,10 +38,12 @@ jobs:
           python -m pip install twine
           python -m twine check dist/*
       - name: Check the installed public API and actual subprocess
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python -m pip install dist/*.whl packaging
           mkdir "$RUNNER_TEMP/command-contract"
-          python -I -B tests/fixtures/command-package/check_installed.py independent "$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')" "$GITHUB_WORKSPACE/tests/fixtures/command-package/child.py" "$RUNNER_TEMP/command-contract"
+          python -I -B tests/fixtures/command-package/check_installed.py "$RELEASE_TAG" "$RUNNER_TEMP/command-contract"
       - name: Refuse conflicting releases and recognize exact replay
         id: registry
         env:
@@ -55,6 +57,4 @@ jobs:
       - name: Verify registry bytes after publication or exact replay
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python -I -B .github/scripts/release.py registry --tag "$RELEASE_TAG" | tee registry-result.json
-          python -c 'import json; assert json.load(open("registry-result.json"))["decision"] == "already-published"'
+        run: python -I -B .github/scripts/release.py verify --tag "$RELEASE_TAG"

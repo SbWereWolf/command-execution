@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+from time import sleep
 import tomllib
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -54,17 +55,31 @@ def check_registry(name, version, dist):
     return "already-published"
 
 
+def verify_publication(name, version, dist):
+    """Wait briefly for the uploaded version to become visible in PyPI's API."""
+    for delay in (1, 2, 4, 8, 15, 30):
+        if check_registry(name, version, dist) == "already-published":
+            return "already-published"
+        sleep(delay)
+    if check_registry(name, version, dist) == "already-published":
+        return "already-published"
+    raise ValueError("published release did not become visible in the registry")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("validate", "registry"))
+    parser.add_argument("phase", choices=("validate", "registry", "verify"))
     parser.add_argument("--tag", required=True)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--dist", type=Path, default=Path("dist"))
     args = parser.parse_args()
     try:
         name, version = validate_release(args.root, args.tag)
-        decision = (check_registry(name, version, args.dist)
-                    if args.phase == "registry" else "validated")
+        decision = "validated"
+        if args.phase == "registry":
+            decision = check_registry(name, version, args.dist)
+        elif args.phase == "verify":
+            decision = verify_publication(name, version, args.dist)
     except (ValueError, OSError) as error:
         parser.exit(1, f"release: {error}\n")
     print(json.dumps({"name": name, "version": version, "decision": decision}))

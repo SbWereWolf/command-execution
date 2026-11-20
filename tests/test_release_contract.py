@@ -1,9 +1,4 @@
-"""Current source metadata and historical 1.0.0 publication-gate behavior.
-
-Metadata tests observe the real existing bootstrap. Gate tests are authored
-before implementation and require the future gate; their missing-file error
-is deliberately not used as behavioral RED evidence.
-"""
+"""Current source metadata and publication-gate behavior."""
 import ast
 import importlib.util
 import io
@@ -59,20 +54,15 @@ def checked_registry_reply(*, payload=b"", failure=None):
 
 
 class MetadataContract(unittest.TestCase):
-    """Literal user-selected version; no production-generated oracle."""
-
     def test_bootstrap_has_independent_package_identity(self):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
         self.assertEqual(project["name"], CONTRACT["name"])
 
-    def test_distribution_declares_requested_release(self):
+    def test_module_version_matches_distribution(self):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
-        self.assertEqual(project["version"], CONTRACT["source_version"])
-
-    def test_module_declares_requested_release(self):
         self.assertEqual(
             declared_version(ROOT / "src/command_execution/__init__.py"),
-            CONTRACT["source_version"],
+            project["version"],
         )
 
 
@@ -185,6 +175,24 @@ class ReleaseGateContract(unittest.TestCase):
             )
         self.assertEqual(self.artifact.read_bytes(), before)
         self.assertEqual(list(self.dist.iterdir()), [self.artifact])
+
+    def test_verification_waits_for_a_missing_release_to_become_visible(self):
+        missing = HTTPError(CONTRACT["release_api_url"], 404, "Not Found", None, None)
+        response = (FIXTURES / "published-release.json").read_bytes()
+        with patch.object(self.gate, "urlopen", side_effect=[missing, io.BytesIO(response)]):
+            with patch.object(self.gate, "sleep") as sleep:
+                self.assertEqual(
+                    self.gate.verify_publication(CONTRACT["name"], CONTRACT["version"], self.dist),
+                    "already-published",
+                )
+        sleep.assert_called_once()
+
+    def test_verification_fails_when_release_remains_missing(self):
+        missing = HTTPError(CONTRACT["release_api_url"], 404, "Not Found", None, None)
+        with patch.object(self.gate, "urlopen", side_effect=checked_registry_reply(failure=missing)):
+            with patch.object(self.gate, "sleep"):
+                with self.assertRaisesRegex(ValueError, "did not become visible"):
+                    self.gate.verify_publication(CONTRACT["name"], CONTRACT["version"], self.dist)
 
     def test_different_published_bytes_refuse_another_upload(self):
         self.artifact.write_bytes(b"different candidate bytes\n")
