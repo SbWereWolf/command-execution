@@ -1,5 +1,5 @@
 """Pure configuration, command coordination and structured execution results."""
-__version__ = '2.0.6'
+__version__ = '2.0.7'
 
 from .json_codec import JSONCodec
 from .json_paths import JSONPathEditor, JSONMerger

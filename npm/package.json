@@ -1,0 +1,20 @@
+{
+  "name": "command-execution",
+  "version": "2.0.7",
+  "description": "Run ordered commands from JSON and read their structured results",
+  "bin": {
+    "command-execution": "bin/command-execution.cjs"
+  },
+  "files": ["bin/", "src/", "vendor/"],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SbWereWolf/command-execution.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

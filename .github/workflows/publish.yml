@@ -58,3 +58,37 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python -I -B .github/scripts/release.py verify --tag "$RELEASE_TAG"
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.15'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org/
+      - name: Use the release version of npm
+        run: npm install --global npm@11.21.3
+      - name: Build and test the npm tarball
+        run: |
+          python -I -B .github/scripts/release.py validate --tag "$RELEASE_TAG"
+          python -I -B .github/scripts/npm-release.py pack --tag "$RELEASE_TAG"
+          python -I -B .github/scripts/npm-release.py smoke --tag "$RELEASE_TAG"
+      - name: Check npm for an identical release
+        id: npm-registry
+        run: |
+          decision=$(python -I -B .github/scripts/npm-release.py registry --tag "$RELEASE_TAG")
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+      - name: Publish to npm through the trusted publisher
+        if: steps.npm-registry.outputs.decision == 'publish'
+        run: npm publish "dist/npm/command-execution-${RELEASE_TAG#v}.tgz" --access public
+      - name: Verify npm tarball after upload or exact replay
+        run: python -I -B .github/scripts/npm-release.py verify --tag "$RELEASE_TAG"
