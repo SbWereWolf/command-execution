@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from time import sleep
+from time import monotonic, sleep
 import tomllib
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -17,6 +17,8 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[2]
 NPM_SOURCE = ROOT / "npm"
 REGISTRY = "https://registry.npmjs.org"
+PUBLICATION_WAIT_SECONDS = 25 * 60
+PUBLICATION_POLL_SECONDS = 30
 
 
 def pack(tarball):
@@ -86,6 +88,20 @@ def registry(name, version, integrity):
     return "already-published"
 
 
+def verify_publication(name, version, integrity):
+    """Wait for npm's publish-time validation before comparing public integrity."""
+    deadline = monotonic() + PUBLICATION_WAIT_SECONDS
+    while registry(name, version, integrity) != "already-published":
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise ValueError(
+                f"npm did not make {name}@{version} public within "
+                f"{PUBLICATION_WAIT_SECONDS // 60} minutes"
+            )
+        print(f"Waiting for npm to make {name}@{version} public", flush=True)
+        sleep(min(PUBLICATION_POLL_SECONDS, remaining))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("pack", "smoke", "registry", "verify"))
@@ -108,13 +124,8 @@ def main():
             if args.phase == "registry":
                 print(registry(name, version, integrity))
             else:
-                for delay in (0, 2, 4, 8, 16, 30):
-                    if delay:
-                        sleep(delay)
-                    if registry(name, version, integrity) == "already-published":
-                        print(f"Verified {name}@{version}: {integrity}")
-                        return
-                raise ValueError("npm did not show the published version")
+                verify_publication(name, version, integrity)
+                print(f"Verified {name}@{version}: {integrity}")
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"npm release: {error}\n")
 
