@@ -2,10 +2,10 @@
 
 The command-execution CLI reads a JSON command chain and writes JSON Lines.
 This npm distribution includes the Python implementation and its dependencies.
-It requires Node.js 22.14+ and a locally installed Python 3.12+.
+It requires Node.js 22.0.0+ and a locally installed Python 3.12+.
 
 ```sh
-npm install -g command-execution
+npm install -g --engine-strict command-execution
 command-execution --help
 ```
 
@@ -28,7 +28,7 @@ The package also supplies the CE wheel and its Python runtime wheels in
 without a Python index:
 
 ```bash
-python -m pip install --no-index --find-links node_modules/command-execution/vendor command-execution==2.0.9
+python -m pip install --no-index --find-links node_modules/command-execution/vendor command-execution==2.0.10
 ```
 
 Use the exact CE version selected by the consumer's npm lock. The

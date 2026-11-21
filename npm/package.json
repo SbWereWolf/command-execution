@@ -1,13 +1,13 @@
 {
   "name": "command-execution",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "Run ordered commands from JSON and read their structured results",
   "bin": {
     "command-execution": "bin/command-execution.cjs"
   },
   "files": ["bin/", "src/", "vendor/"],
   "engines": {
-    "node": ">=22.14.0"
+    "node": ">=22.0.0"
   },
   "repository": {
     "type": "git",
