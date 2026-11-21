@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, publish and reinstall the selected channel inside its own namespace.
+# Build or publish one channel inside its own isolated network namespace.
 set -euo pipefail
 
 repo=$(git rev-parse --show-toplevel)
@@ -13,7 +13,6 @@ if [[ ${1-} == --inside ]]; then
   out=$2
   tag=$3
   artifact=$4
-  bash "$driver" prepare "$channel" "$out/candidate" > "$out/build.log" 2>&1
   candidate=$(bash "$driver" artifact "$channel" "$out/candidate")
   test "$candidate" = "$out/candidate/$artifact"
   if [[ $channel == npm ]]; then
@@ -40,17 +39,18 @@ if [[ ${1-} == --inside ]]; then
   exit
 fi
 
-channel=$1
-out=$2
-tag=$3
-artifact=$4
+phase=$1
+channel=$2
+out=$3
+tag=$4
+artifact=$5
 mkdir -- "$out"
 export CE_PYTHON CE_SDK_FIXTURE CE_CAPTURE_RELEASE CE_REGISTRY_UNAVAILABLE
 CE_PYTHON=$(command -v "${RELEASE_PYTHON:-python3}")
 CE_SDK_FIXTURE="$repo/tests/fixtures/command-package/check_installed.py"
 CE_CAPTURE_RELEASE="$helpers/capture-release.py"
 CE_REGISTRY_UNAVAILABLE=
-if [[ $RELEASE_REF_NAME == *-"$channel"-outage ]]; then
+if [[ $phase == build || $RELEASE_REF_NAME == *-"$channel"-outage ]]; then
   CE_REGISTRY_UNAVAILABLE=$channel
 fi
 
@@ -68,7 +68,7 @@ if [[ $channel == npm ]]; then
   cp -a "$repo/npm/wheelhouse" "$out/locked-inputs"
 elif [[ $channel == pypi ]]; then
   export CE_DEVPI_INIT CE_DEVPI_SERVER CE_TWINE CE_PYPI_BUILD_INPUTS
-  if [[ -z ${CE_TWINE-} ]]; then
+  if [[ $phase == publish && -z ${CE_TWINE-} ]]; then
     "$CE_PYTHON" -m venv "$out/python-tools"
     "$out/python-tools/bin/python" -m pip --disable-pip-version-check --no-cache-dir install \
       --index-url https://pypi.org/simple devpi-server==6.21.0 twine==7.0.0 > "$out/bootstrap-python.log" 2>&1
@@ -88,6 +88,23 @@ else
   exit 2
 fi
 
+if [[ $phase == build ]]; then
+  zone="$out/isolation"
+  code=0
+  bash "$helpers/with-registry.sh" "$channel" "$zone" --     bash "$driver" prepare "$channel" "$out/build" > "$out/build.log" 2>&1 || code=$?
+  cat "$out/build.log"
+  test "$code" -eq 0
+  cp -- "$out/build/$artifact" "$out/build/manifest.json" "$out/"
+  cp -- "$zone/network.log" "$out/build-network.log"
+  exit
+fi
+
+test "$phase" = publish
+build=${6:?Select the downloaded distribution}
+bash "$driver" artifact "$channel" "$build" >/dev/null
+mkdir "$out/candidate"
+cp -- "$build/$artifact" "$build/manifest.json" "$out/candidate/"
+cp -- "$build/build.log" "$build/build-network.log" "$out/"
 zone="$out/isolation"
 code=0
 bash "$helpers/with-registry.sh" "$channel" "$zone" -- \

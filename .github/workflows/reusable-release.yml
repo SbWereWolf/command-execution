@@ -43,7 +43,7 @@ env:
 jobs:
   build:
     name: Build distribution
-    if: inputs.mode == 'production'
+    if: inputs.mode == 'production' || (inputs.mode == 'qualification' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/qualify-'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -69,11 +69,19 @@ jobs:
       - name: Build and test the selected distribution
         run: |
           [[ $RELEASE_DRIVER == .github/scripts/* && $RELEASE_DRIVER != *..* ]]
-          bash "$RELEASE_DRIVER" prepare "$RELEASE_CHANNEL" "$RUNNER_TEMP/release-dist"
+          if [[ $RELEASE_MODE == qualification ]]; then
+            bash "$RELEASE_DRIVER" qualify-build "$RELEASE_CHANNEL" "$RUNNER_TEMP/release-dist"
+          else
+            bash "$RELEASE_DRIVER" prepare "$RELEASE_CHANNEL" "$RUNNER_TEMP/release-dist"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ inputs.channel }}
-          path: ${{ runner.temp }}/release-dist
+          path: |
+            ${{ runner.temp }}/release-dist/*.whl
+            ${{ runner.temp }}/release-dist/*.tgz
+            ${{ runner.temp }}/release-dist/manifest.json
+            ${{ runner.temp }}/release-dist/*.log
           if-no-files-found: error
           overwrite: true
 
@@ -134,6 +142,7 @@ jobs:
 
   qualify:
     name: Qualify ${{ inputs.channel }}
+    needs: build
     if: inputs.mode == 'qualification' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/qualify-')
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -163,8 +172,12 @@ jobs:
         run: |
           [[ $RELEASE_DRIVER == .github/scripts/* && $RELEASE_DRIVER != *..* ]]
           bash "$RELEASE_DRIVER" identity "$RELEASE_CHANNEL" "$RUNNER_TEMP/qualification"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-${{ inputs.channel }}
+          path: ${{ runner.temp }}/qualification-input
       - name: Qualify release
-        run: bash "$RELEASE_DRIVER" qualify "$RELEASE_CHANNEL" "$RUNNER_TEMP/qualification"
+        run: bash "$RELEASE_DRIVER" qualify "$RELEASE_CHANNEL" "$RUNNER_TEMP/qualification" "$RUNNER_TEMP/qualification-input"
       - name: Preserve qualification evidence
         if: always()
         uses: actions/upload-artifact@v4

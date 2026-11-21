@@ -102,9 +102,13 @@ case "$phase" in
       "$python" -I -B .github/scripts/release.py "$phase" --tag "$tag" --dist "$out" | jq -er .decision
     fi
     ;;
+  qualify-build)
+    test "$mode" = qualification
+    exec bash tests/release/qualify.sh build "$channel" "$out" "$tag" "$artifact"
+    ;;
   qualify)
     test "$mode" = qualification
-    exec bash tests/release/qualify.sh "$channel" "$out" "$tag" "$artifact"
+    exec bash tests/release/qualify.sh publish "$channel" "$out" "$tag" "$artifact" "${4:?Select the downloaded distribution}"
     ;;
   *) exit 2 ;;
 esac
