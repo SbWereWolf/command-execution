@@ -28,7 +28,7 @@ The package also supplies the CE wheel and its Python runtime wheels in
 without a Python index:
 
 ```bash
-python -m pip install --no-index --find-links node_modules/command-execution/vendor command-execution==2.0.8
+python -m pip install --no-index --find-links node_modules/command-execution/vendor command-execution==2.0.9
 ```
 
 Use the exact CE version selected by the consumer's npm lock. The

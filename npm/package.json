@@ -1,6 +1,6 @@
 {
   "name": "command-execution",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "Run ordered commands from JSON and read their structured results",
   "bin": {
     "command-execution": "bin/command-execution.cjs"
