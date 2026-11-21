@@ -41,3 +41,5 @@ print(result.commands[0].raw.stdout.decode(), end="")
 - [Руководство на русском](https://github.com/SbWereWolf/command-execution/blob/master/docs/usage.ru.md).
 - [Полный справочник CLI и Python API](https://github.com/SbWereWolf/command-execution/blob/master/docs/usage.md).
 - [Установка и сопровождение](https://github.com/SbWereWolf/command-execution/blob/master/docs/maintenance.md).
+
+См. [раздельный выпуск npm и PyPI](docs/release.ru.md).

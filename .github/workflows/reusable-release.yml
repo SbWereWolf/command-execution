@@ -1,0 +1,181 @@
+name: Release package channel
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      mode:
+        required: true
+        type: string
+      package:
+        required: true
+        type: string
+      driver:
+        required: true
+        type: string
+      python_version:
+        required: true
+        type: string
+      node_version:
+        default: '24'
+        type: string
+      npm_version:
+        default: '11.21.3'
+        type: string
+      npm_environment:
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_MODE: ${{ inputs.mode }}
+  RELEASE_CHANNEL: ${{ inputs.channel }}
+  RELEASE_PACKAGE: ${{ inputs.package }}
+  RELEASE_DRIVER: ${{ inputs.driver }}
+  RELEASE_REF_NAME: ${{ github.ref_name }}
+  RELEASE_SHA: ${{ github.sha }}
+  RELEASE_PYTHON: python
+
+jobs:
+  build:
+    name: Build distribution
+    if: inputs.mode == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - uses: actions/setup-node@v6
+        if: inputs.channel == 'npm'
+        with:
+          node-version: ${{ inputs.node_version }}
+          package-manager-cache: false
+      - name: Select the npm release client
+        if: inputs.channel == 'npm'
+        env:
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          [[ $NPM_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          npm install --global --ignore-scripts --no-audit --no-fund "npm@$NPM_VERSION"
+      - name: Build and test the selected distribution
+        run: |
+          [[ $RELEASE_DRIVER == .github/scripts/* && $RELEASE_DRIVER != *..* ]]
+          bash "$RELEASE_DRIVER" prepare "$RELEASE_CHANNEL" "$RUNNER_TEMP/release-dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.channel }}
+          path: ${{ runner.temp }}/release-dist
+          if-no-files-found: error
+          overwrite: true
+
+  publish_npm:
+    name: Publish npm distribution
+    if: inputs.mode == 'production' && inputs.channel == 'npm' && inputs.npm_environment == '' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions: &npm_permissions
+      contents: read
+      id-token: write
+    steps: &npm_publish_steps
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node_version }}
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - name: Select the npm release client
+        env:
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          [[ $NPM_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          npm install --global --ignore-scripts --no-audit --no-fund "npm@$NPM_VERSION"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-npm
+          path: ${{ runner.temp }}/release-dist
+      - name: Publish to npm or recognize exact replay
+        run: |
+          [[ $RELEASE_DRIVER == .github/scripts/* && $RELEASE_DRIVER != *..* ]]
+          path="$RUNNER_TEMP/release-dist"
+          artifact=$(bash "$RELEASE_DRIVER" artifact npm "$path")
+          decision=$(bash "$RELEASE_DRIVER" registry npm "$path")
+          case "$decision" in
+            publish) npm publish "$artifact" --registry https://registry.npmjs.org/ --access public --ignore-scripts ;;
+            already-published) printf '%s\n' 'Exact release already published' ;;
+            *) exit 1 ;;
+          esac
+          bash "$RELEASE_DRIVER" verify npm "$path"
+
+  publish_npm_in_environment:
+    name: Publish npm distribution with deployment protection
+    if: inputs.mode == 'production' && inputs.channel == 'npm' && inputs.npm_environment != '' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: ${{ inputs.npm_environment }}
+    permissions: *npm_permissions
+    steps: *npm_publish_steps
+
+  qualify:
+    name: Qualify ${{ inputs.channel }}
+    if: inputs.mode == 'qualification' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/qualify-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - uses: actions/setup-node@v6
+        if: inputs.channel == 'npm'
+        with:
+          node-version: ${{ inputs.node_version }}
+          package-manager-cache: false
+      - name: Select the npm release client
+        if: inputs.channel == 'npm'
+        env:
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          [[ $NPM_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          npm install --global --ignore-scripts --no-audit --no-fund "npm@$NPM_VERSION"
+      - name: Check release identity
+        run: |
+          [[ $RELEASE_DRIVER == .github/scripts/* && $RELEASE_DRIVER != *..* ]]
+          bash "$RELEASE_DRIVER" identity "$RELEASE_CHANNEL" "$RUNNER_TEMP/qualification"
+      - name: Qualify release
+        run: bash "$RELEASE_DRIVER" qualify "$RELEASE_CHANNEL" "$RUNNER_TEMP/qualification"
+      - name: Preserve qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-${{ inputs.channel }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/qualification/report/
+            ${{ runner.temp }}/qualification/candidate/
+            ${{ runner.temp }}/qualification/locked-inputs/
+            ${{ runner.temp }}/qualification/*.log
+            ${{ runner.temp }}/qualification/*.json
+            ${{ runner.temp }}/qualification/*.sha256
+            ${{ runner.temp }}/qualification/*.txt
+          if-no-files-found: error

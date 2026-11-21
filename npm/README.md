@@ -19,3 +19,19 @@ printf '%s\n' '{"commands":[{"argv":["python3","-c","print(42)"],"sync-mode":["s
 
 The command in `argv` must be available on your platform. See the
 [CLI and JSON configuration guide](https://github.com/SbWereWolf/command-execution/blob/master/docs/usage.md).
+
+## Python SDK from an npm installation
+
+The package also supplies the CE wheel and its Python runtime wheels in
+`vendor/`. A consumer can resolve CE with npm, verify the wheel files against
+`vendor/SHA256SUMS`, and install them into its selected Python environment
+without a Python index:
+
+```bash
+python -m pip install --no-index --find-links node_modules/command-execution/vendor command-execution==2.0.8
+```
+
+Use the exact CE version selected by the consumer's npm lock. The
+`vendor/runtime-inputs.json` file identifies the origin and SHA-256 of
+each runtime dependency. When using PyPI, the normal pip dependency
+resolution applies.
