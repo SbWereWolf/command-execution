@@ -12,6 +12,25 @@ if [[ ${1-} != --inside ]]; then
   mkdir -m 700 -- "$2"
   directory=$(realpath -- "$2")
   shift 3
+  if [[ ${GITHUB_ACTIONS-} == true && ${RUNNER_ENVIRONMENT-} == github-hosted ]]; then
+    # The hosted runner restricts uid_map for unprivileged user namespaces.
+    environment=()
+    for name in PATH HOME RUNNER_TEMP RELEASE_MODE RELEASE_PACKAGE RELEASE_REF_NAME RELEASE_SHA RELEASE_PYTHON \
+      GITHUB_REF_NAME GITHUB_REF GITHUB_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT GITHUB_JOB \
+      CE_PYTHON CE_SDK_FIXTURE CE_CAPTURE_RELEASE CE_REGISTRY_UNAVAILABLE CE_NODE24_BIN_DIR CE_VERDACCIO \
+      CE_DEVPI_INIT CE_DEVPI_SERVER CE_TWINE CE_PYPI_BUILD_INPUTS; do
+      if [[ -v $name ]]; then environment+=("$name=${!name}"); fi
+    done
+    exec sudo -n -- /usr/bin/unshare --net -- /bin/bash -c '
+      set -e
+      /usr/sbin/ip link set lo up
+      uid=$1 gid=$2
+      shift 2
+      exec /usr/bin/setpriv --reuid "$uid" --regid "$gid" --init-groups \
+        --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all -- "$@"
+    ' qualification-network "$(id -u)" "$(id -g)" \
+      /usr/bin/env -i "${environment[@]}" /bin/bash "$0" --inside "$kind" "$directory" "$@"
+  fi
   exec unshare --user --map-root-user --net bash "$0" --inside "$kind" "$directory" "$@"
 fi
 
@@ -20,9 +39,13 @@ kind=$1
 directory=$2
 shift 2
 umask 077
-ip link set lo up
+if [[ $EUID == 0 ]]; then ip link set lo up; fi
+test -n "$(ip -o link show up dev lo)"
 test -z "$(ip route show default)"
-ip -br address > "$directory/network.log"
+{
+  printf 'qualification uid=%s\n' "$EUID"
+  ip -br address
+} > "$directory/network.log"
 for host in pypi.org files.pythonhosted.org registry.npmjs.org; do
   if curl -q --noproxy '*' --max-time 3 --silent --show-error --fail "https://$host/" >/dev/null 2>>"$directory/network.log"; then
     printf 'External endpoint unexpectedly reachable: %s\n' "$host" >&2
