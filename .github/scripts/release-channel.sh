@@ -15,7 +15,7 @@ test "$(git rev-parse HEAD)" = "$sha"
 case "$channel" in npm|pypi) ;; *) exit 2 ;; esac
 case "$mode" in
   production) [[ $ref =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] ;;
-  qualification) [[ $ref =~ ^qualify-ce-v([0-9]+\.[0-9]+\.[0-9]+)-(npm|pypi)-outage$ ]] ;;
+  qualification) [[ $ref =~ ^qualify-ce-v([0-9]+\.[0-9]+\.[0-9]+)(-r[1-9][0-9]*)?-(npm|pypi)-outage$ ]] ;;
   *) exit 2 ;;
 esac
 version=${BASH_REMATCH[1]}

@@ -164,7 +164,7 @@ def verify_command(root, channel, record, expected_success):
 
 def verify_run(root, descriptor, failing, source):
     tag = descriptor["tag"]
-    require(re.fullmatch(r"qualify-ce-v[0-9]+[.][0-9]+[.][0-9]+-(pypi|npm)-outage", tag)
+    require(re.fullmatch(r"qualify-ce-v[0-9]+[.][0-9]+[.][0-9]+(?:-r[1-9][0-9]*)?-(pypi|npm)-outage", tag)
             and tag.endswith(f"-{failing}-outage"), "incorrect qualification tag")
     run = read_json(artifact_path(root, descriptor["run_json"]))
     jobs = read_json(artifact_path(root, descriptor["jobs_json"]))["jobs"]

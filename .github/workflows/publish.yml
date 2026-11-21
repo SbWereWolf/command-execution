@@ -28,6 +28,10 @@ jobs:
 
   pypi:
     uses: ./.github/workflows/reusable-release.yml
+    # Actions validates every nested job's permissions before evaluating its condition.
+    permissions:
+      contents: read
+      id-token: write
     with:
       channel: pypi
       mode: ${{ startsWith(github.ref_name, 'qualify-') && 'qualification' || 'production' }}
